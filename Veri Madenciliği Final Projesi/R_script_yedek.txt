@@ -1,0 +1,131 @@
+# İndirelim
+install.packages("tuber") # YouTube'a baglanmak icin
+install.packages("httpuv") # web'e baglanmak icin
+install.packages("tm")  # metin madenciligi icin
+install.packages("SnowballC") # metin koku icin
+install.packages("wordcloud") # kelime bulutu ureteci 
+install.packages("RColorBrewer") # renk paletleri
+install.packages("syuzhet") # duyarlilik analizi icin
+install.packages("ggplot2") # grafik cizmek icin
+install.packages("stringr") # metin isleme
+
+# Aktif edelim
+library("tuber")
+library("httpuv")
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+library("syuzhet")
+library("ggplot2")
+library("stringr")
+
+# API key tanimlayalim
+api <- "**********"
+apsecret <- "**********"
+yt_oauth(api,apsecret,token="") # baglanti kuralim
+
+comments <- get_all_comments("**********") #yorumlari cekelim
+
+comments_clean <-comments[!( duplicated(comments$textDisplay)),] #tekrar eden yorumlari temizleyelim
+
+getwd() #dosyamizin hangi konuma kaydedilecegini kontrol edelim. Eger istersek setwd() komutu ile konum degistirilebilir
+write.csv(comments, "comments.csv", row.names = FALSE) #csv formatinda kaydettik
+
+write.csv(comments_clean, "comments_clean.csv", row.names = FALSE) #temizlenmis yorumlari kaydettik
+
+##
+
+# YouTube'den cektigimiz yorumlari csv formatinda cagiralim
+yorumlar <- read.table(file.choose(),header=T,sep=",")
+head(yorumlar$textOriginal)
+
+# Veri setinden tekrar eden yorumlari temizleyelim
+yorumlar <-yorumlar[!( duplicated(yorumlar$textOriginal)),]
+
+# Veri setinden emojileri temizleyelim
+emoji_pattern <- "[\U{1F600}-\U{1F6FF}]|[\U{2600}-\U{26FF}]|[\U{2700}-\U{27BF}]|[\U{1F300}-\U{1F5FF}]|[\U{1F680}-\U{1F6FF}]|[\U{1F1E0}-\U{1F1FF}]|[\U{1F900}-\U{1F9FF}]|[\U{1F200}-\U{1F2FF}]|[\U{1F4C0}-\U{1F4FF}]|[\U{1F600}-\U{1F64F}]|[\U{1F680}-\U{1F6FF}]|[\U{1F1E6}-\U{1F1FF}]"
+yorumlar$temiz_metin <- str_replace_all(yorumlar, emoji_pattern, "") 
+
+# Veri setinden "textOriginal" sutununu kullanarak bazi temizlenmis metin olusturma fonksiyonlari
+yorumlar$temiz_metin <- tolower(yorumlar$textOriginal)  # Tum metni kucuk harfe donusturme
+yorumlar$temiz_metin <- str_replace_all(yorumlar$temiz_metin, "[^[:alnum:] ]", "")  # Alfanumerik olmayan karakterleri bosluklarla degistirme
+#yorumlar$temiz_metin <- removeNumbers(yorumlar$temiz_metin)  # Sayilari kaldirma
+yorumlar$temiz_metin <- removePunctuation(yorumlar$temiz_metin)  # Noktalama isaretlerini kaldirma
+yorumlar$temiz_metin <- stripWhitespace(yorumlar$temiz_metin)  # Bosluklari temizleme
+yorumlar$temiz_metin <- gsub("\\s+", " ", yorumlar$temiz_metin) # Bosluklari teke dusurelim
+
+# Durak kelimeleri silelim
+stop_kelimeler <- c("acaba", "ama", "ancak", "artık", "aslında", "aynen", "az", "bana", "bazen", "belki", "ben", "beni", "benim", "bile", "bir",
+                    "biraz", "birçoğu", "birçok", "birkaç", "biz",  "bizden", "bize", "bizi", "bizim", "bu", "buna", "bunda", "bundan", "bunu",
+                    "bunun", "burada", "böyle", "çoğu", "çoğuna", "çoğunu", "çok", "çünkü", "da", "daha", "de", "defa", "diğer", "diye", "eğer",
+                    "en", "gibi", "hem", "hep", "hepsi", "hepsine", "hepsini", "her", "her biri", "herhangi", "herkes", "herkese", "herkesi",
+                    "herkesin", "hiç", "hiçbir", "için", "ile", "ise", "kez", "ki", "kim", "kime", "kimi", "kimin", "mu", "mü", "nasıl", "ne",
+                    "neden", "nerde", "nerede", "nereden", "niye", "niçin", "o", "on", "ona", "ondan", "onlar", "onlara", "onlardan", "onları",
+                    "onların", "onu", "oysa", "oysaki", "önce", "önceki", "rağmen", 					  "sadece", "sanki", "sen", "siz", "sizden", "size",
+                    "sizi", "sizin", "şey", "şeyden", "şeye", "şeyi", "şeyler", "şunu", "tabii", "tamam", "tüm", "tümü", "ve", "veya", "ya",
+                    "yalnız", "yada", "yani", "yerine", "yine", "zaten", "abi", "kadar", "barış", "video", "olarak", "şu", "bence", "olur",
+                    "olacak", "yil", "olan", "mı", "videoyu", "lan", "özcan", "öyle", "bişey", "bey", "yada", "birşey", "göre", "işte", "fakat",
+                    "olduğu", "tabi", "fakat", "bunlar", "olduğu")
+
+yorumlar$temiz_metin <- removeWords(yorumlar$temiz_metin, words = stop_kelimeler)
+
+# Temizlenmis metni kontrol edelim
+head(yorumlar$temiz_metin)
+
+m_belge <- Corpus(VectorSource(yorumlar$temiz_metin))
+# Terim-belge matrisi olusturalim
+m_belge_dtm <- TermDocumentMatrix(m_belge)
+dtm_m <- as.matrix(m_belge_dtm)
+# Frekansin azalan degerine gore siralayalim
+dtm_v <- sort(rowSums(dtm_m),decreasing=TRUE)
+dtm_d <- data.frame(word = names(dtm_v),freq=dtm_v)
+# En cok kullanilan 20 kelimeyi gosterelim
+head(dtm_d, 20)
+
+head(yorumlar$textOriginal)
+head(yorumlar$temiz_metin)
+# En son temizledigimiz seklinde kaydedelim
+write.csv(yorumlar, "temizlenmisyorumlar.csv", row.names = FALSE) 
+
+# En cok kullanilan kelimeleri cizelim
+barplot(dtm_d[1:20,]$freq, las = 2, names.arg = dtm_d[1:20,]$word,
+        col ="lightgreen", main ="En sık kullanılan 20 kelime",
+        ylab = "Kelime frekansları")
+
+# kelime bulutu olusturalim
+set.seed(1234)
+wordcloud(words = dtm_d$word, freq = dtm_d$freq, min.freq = 5,
+          max.words=100, random.order=FALSE, rot.per=0.40, 
+          colors=brewer.pal(8, "Dark2"))
+
+# bazi terimlerinin diger terimlerle olan iliskisini arastirir.
+findAssocs(m_belge_dtm, terms = c("dünya", "küresel"), corlimit = 0.25)
+
+# metin belgesinin her bir terimi icin duygusal kategorilere atanan bir duygu skoru vektoru olusturalim
+sentiment <- get_nrc_sentiment(yorumlar$temiz_metin)
+head(sentiment,20)
+
+# transpose
+td<-data.frame(t(sentiment))
+
+# RowSums islevi, bir gruplama degiskeninin her duzeyi icin satirlar boyunca sutun toplamlarini hesaplar.
+td_new <- data.frame(rowSums(td[2:10723]))
+
+# Donusum ve temizlik yapalim
+names(td_new)[1] <- "count"
+td_new <- cbind("sentiment" = rownames(td_new), td_new)
+rownames(td_new) <- NULL
+td_new2<-td_new[1:10,]
+
+# Duygu analizini cubuk grafigiyle inceleyelim
+quickplot(sentiment, data=td_new2, weight=count, geom="bar", fill=sentiment, ylab="sayma")+ggtitle("Anket Duyguları")
+
+# Duygu analizini yuzde olarak cubuk grafigiyle inceleyelim
+barplot(
+  sort(colSums(prop.table(sentiment[, 1:10]))), 
+  horiz = TRUE, 
+  cex.names = 0.7, 
+  las = 1, 
+  main = "Metindeki Duygular", xlab="Yüzde"
+)
